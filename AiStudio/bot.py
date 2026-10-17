@@ -173,9 +173,9 @@ def _menu_text(account: Optional[Dict[str, Any]]) -> str:
     model = str(account.get("model") or "").replace("models/", "")
     return (
         "<b>AiStudio</b>\n"
-        f"Аккаунт: <b>{_esc(account['name'])}</b>\n"
-        f"Куки: <b>{account['cookie_count']}</b> · "
-        f"Модель: <code>{_esc(model)}</code> · "
+        f"Профиль: <b>{_esc(account['name'])}</b>\n"
+        f"Куки: <b>{account['cookie_count']}</b>\n"
+        f"Модель: <code>{_esc(model)}</code>\n"
         f"Thinking: <b>{_esc(account['effort'].upper())}</b>"
     )
 
@@ -209,7 +209,12 @@ def _cancel_kb() -> Any:
     return builder.as_markup()
 
 
-async def _edit(callback: CallbackQuery, text: str, keyboard: Any) -> None:
+async def _edit(
+    callback: CallbackQuery,
+    text: str,
+    keyboard: Any,
+    answer_callback: bool = True,
+) -> None:
     try:
         await callback.message.edit_text(
             text,
@@ -217,14 +222,19 @@ async def _edit(callback: CallbackQuery, text: str, keyboard: Any) -> None:
             parse_mode=ParseMode.HTML,
             disable_web_page_preview=True,
         )
-    except TelegramBadRequest:
+    except TelegramBadRequest as exc:
+        if "message is not modified" in str(exc).lower():
+            if answer_callback:
+                await callback.answer()
+            return
         await callback.message.answer(
             text,
             reply_markup=keyboard,
             parse_mode=ParseMode.HTML,
             disable_web_page_preview=True,
         )
-    await callback.answer()
+    if answer_callback:
+        await callback.answer()
 
 
 async def _send_plain(message: Message, text: str) -> Optional[Message]:
@@ -239,13 +249,18 @@ async def _send_plain(message: Message, text: str) -> Optional[Message]:
 
 
 def _cookies_text(account: Optional[Dict[str, Any]]) -> str:
+    accounts = get_storage().list_accounts()
     if not account:
-        return "<b>Куки</b>\n\nАктивного профиля нет. Добавь куки."
+        return (
+            "<b>Куки</b>\n\n"
+            "Активного профиля нет. Добавь куки, чтобы начать."
+        )
     return (
         "<b>Куки</b>\n"
-        f"Аккаунт: <b>{_esc(account['name'])}</b>\n"
-        f"Количество: <b>{account['cookie_count']}</b>\n\n"
-        "Добавить новый профиль, заменить куки активного или удалить профиль."
+        f"Активный профиль: <b>{_esc(account['name'])}</b>\n"
+        f"Кук: <b>{account['cookie_count']}</b> · "
+        f"профилей: <b>{len(accounts)}</b>\n\n"
+        "Добавить новый профиль, переключить активный, заменить или удалить."
     )
 
 
@@ -253,11 +268,108 @@ def _cookies_kb(account: Optional[Dict[str, Any]]):
     builder = InlineKeyboardBuilder()
     builder.button(text="Добавить", callback_data="cookie_add")
     if account:
+        if len(get_storage().list_accounts()) > 1:
+            builder.button(text="Профили", callback_data="profiles")
         builder.button(
             text="Заменить активные", callback_data="cookie_replace"
         )
         builder.button(text="Удалить", callback_data="cookie_delete")
     builder.button(text="Назад", callback_data="menu")
+    builder.adjust(2, 2)
+    return builder.as_markup()
+
+
+_last_prompts: Dict[int, str] = {}
+
+
+async def _typing_loop(bot: Bot, chat_id: int) -> None:
+    while True:
+        try:
+            await bot.send_chat_action(chat_id, "typing")
+        except Exception:
+            pass
+        await asyncio.sleep(4)
+
+
+async def _generate_and_reply(
+    message: Message, service: BotService, prompt: str
+) -> None:
+    user_id = message.from_user.id if message.from_user else 0
+    _last_prompts[user_id] = prompt
+    if len(_last_prompts) > 100:
+        _last_prompts.pop(next(iter(_last_prompts)), None)
+
+    status = await message.answer("Генерирую…")
+    typing = asyncio.create_task(
+        _typing_loop(message.bot, message.chat.id)
+    )
+    try:
+        result = await service.generate(prompt)
+    except Exception as exc:
+        result = GenerationResult(False, error=str(exc))
+    finally:
+        typing.cancel()
+        try:
+            await typing
+        except asyncio.CancelledError:
+            pass
+        try:
+            await status.delete()
+        except TelegramBadRequest:
+            pass
+
+    if not result.ok:
+        builder = InlineKeyboardBuilder()
+        builder.button(text="Повторить", callback_data="retry")
+        builder.button(text="В меню", callback_data="menu_new")
+        builder.adjust(2)
+        await message.answer(
+            "<b>Ошибка</b>\n" + _esc(result.error[:2500]),
+            parse_mode=ParseMode.HTML,
+            reply_markup=builder.as_markup(),
+        )
+        return
+
+    last = await _send_plain(
+        message, result.answer or "(пустой ответ)"
+    )
+    if last is None:
+        return
+    builder = InlineKeyboardBuilder()
+    if result.thoughts:
+        _remember_thought(last.message_id, result.thoughts)
+        builder.button(
+            text="Показать мысли",
+            callback_data=f"thoughts:{last.message_id}",
+        )
+    builder.button(text="Новый запрос", callback_data="new_prompt")
+    builder.button(text="В меню", callback_data="menu_new")
+    builder.adjust(2)
+    try:
+        await last.edit_reply_markup(
+            reply_markup=builder.as_markup()
+        )
+    except TelegramBadRequest:
+        pass
+
+
+def _profiles_text() -> str:
+    accounts = get_storage().list_accounts()
+    return (
+        "<b>Профили</b>\n\n"
+        f"Всего: <b>{len(accounts)}</b>. Выбери активный профиль."
+    )
+
+
+def _profiles_kb():
+    builder = InlineKeyboardBuilder()
+    for account in get_storage().list_accounts():
+        mark = "• " if account["is_active"] else ""
+        builder.button(
+            text=f"{mark}{account['name']} · {account['cookie_count']}"[:60],
+            callback_data=f"account_set:{account['id']}",
+        )
+    builder.button(text="Назад", callback_data="cookies")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -368,6 +480,18 @@ def build_router(service: BotService) -> Router:
         account = _active_account()
         await _edit(callback, _menu_text(account), _menu_kb(account))
 
+    @router.callback_query(F.data == "menu_new")
+    async def cb_menu_new(callback: CallbackQuery, state: FSMContext):
+        await state.clear()
+        account = _active_account()
+        await callback.message.answer(
+            _menu_text(account),
+            reply_markup=_menu_kb(account),
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True,
+        )
+        await callback.answer()
+
     @router.callback_query(F.data == "status")
     async def cb_status(callback: CallbackQuery):
         await _edit(
@@ -398,34 +522,38 @@ def build_router(service: BotService) -> Router:
             )
             return
         await state.clear()
-        status = await message.answer("Генерирую…")
-        result = await service.generate(prompt)
-        try:
-            await status.delete()
-        except TelegramBadRequest:
-            pass
-        if not result.ok:
-            await message.answer(
-                "<b>Ошибка</b>\n" + _esc(result.error[:3000]),
-                parse_mode=ParseMode.HTML,
+        await _generate_and_reply(message, service, prompt)
+
+    @router.callback_query(F.data == "new_prompt")
+    async def cb_new_prompt(
+        callback: CallbackQuery, state: FSMContext
+    ):
+        account = _active_account()
+        if not account or not account.get("cookies"):
+            await callback.answer(
+                "Сначала добавь куки.", show_alert=True
             )
             return
-        last = await _send_plain(
-            message, result.answer or "(пустой ответ)"
+        await state.set_state(BotStates.prompt)
+        await callback.message.answer(
+            "Отправь текст запроса одним сообщением.",
+            reply_markup=_cancel_kb(),
+            parse_mode=ParseMode.HTML,
         )
-        if result.thoughts and last is not None:
-            _remember_thought(last.message_id, result.thoughts)
-            builder = InlineKeyboardBuilder()
-            builder.button(
-                text="Показать мысли",
-                callback_data=f"thoughts:{last.message_id}",
+        await callback.answer()
+
+    @router.callback_query(F.data == "retry")
+    async def cb_retry(callback: CallbackQuery):
+        prompt = _last_prompts.get(callback.from_user.id)
+        if not prompt:
+            await callback.answer(
+                "Запрос уже недоступен.", show_alert=True
             )
-            try:
-                await last.edit_reply_markup(
-                    reply_markup=builder.as_markup()
-                )
-            except TelegramBadRequest:
-                pass
+            return
+        await callback.answer("Повторяю запрос…")
+        await _generate_and_reply(
+            callback.message, service, prompt
+        )
 
     @router.callback_query(F.data.startswith("thoughts:"))
     async def cb_thoughts(callback: CallbackQuery):
@@ -440,12 +568,45 @@ def build_router(service: BotService) -> Router:
                 "Мысли уже недоступны.", show_alert=True
             )
             return
-        await _send_plain(callback.message, text)
         await callback.answer()
+        last = await _send_plain(callback.message, text)
+        if last is not None:
+            builder = InlineKeyboardBuilder()
+            builder.button(text="В меню", callback_data="menu_new")
+            try:
+                await last.edit_reply_markup(
+                    reply_markup=builder.as_markup()
+                )
+            except TelegramBadRequest:
+                pass
 
     # ------------------------------------------------------------------ cookies
     @router.callback_query(F.data == "cookies")
     async def cb_cookies(callback: CallbackQuery):
+        account = _active_account()
+        await _edit(
+            callback, _cookies_text(account), _cookies_kb(account)
+        )
+
+    @router.callback_query(F.data == "profiles")
+    async def cb_profiles(callback: CallbackQuery):
+        if not get_storage().list_accounts():
+            await callback.answer("Профилей нет.", show_alert=True)
+            return
+        await _edit(
+            callback, _profiles_text(), _profiles_kb()
+        )
+
+    @router.callback_query(F.data.startswith("account_set:"))
+    async def cb_account_set(callback: CallbackQuery):
+        try:
+            account_id = int((callback.data or "").split(":", 1)[1])
+        except (ValueError, IndexError):
+            await callback.answer("Ошибка.", show_alert=True)
+            return
+        if not get_storage().set_active_account(account_id):
+            await callback.answer("Профиль не найден.", show_alert=True)
+            return
         account = _active_account()
         await _edit(
             callback, _cookies_text(account), _cookies_kb(account)
@@ -459,11 +620,10 @@ def build_router(service: BotService) -> Router:
             "Название профиля. Например: main",
             _cancel_kb(),
         )
-        await callback.answer()
 
     @router.message(BotStates.cookie_name)
     async def on_cookie_name(message: Message, state: FSMContext):
-        name = (message.text or "").strip()[:64] or "default"
+        name = " ".join((message.text or "").split())[:64] or "default"
         await state.update_data(name=name)
         await state.set_state(BotStates.cookie_text)
         await message.answer(
@@ -487,7 +647,6 @@ def build_router(service: BotService) -> Router:
             "Отправь новые куки для активного профиля.",
             _cancel_kb(),
         )
-        await callback.answer()
 
     @router.message(BotStates.cookie_text)
     @router.message(BotStates.cookie_replace)
@@ -525,7 +684,7 @@ def build_router(service: BotService) -> Router:
             )
         await state.clear()
         await message.answer(
-            text,
+            text + "\n\nСообщение с куками можно удалить.",
             reply_markup=_menu_kb(account),
             parse_mode=ParseMode.HTML,
         )
@@ -606,8 +765,12 @@ def build_router(service: BotService) -> Router:
                 "Сначала добавь куки.", show_alert=True
             )
             return
+        await callback.answer()
         await _edit(
-            callback, "Загружаю модели…", _back_kb()
+            callback,
+            "Загружаю модели…",
+            _back_kb(),
+            answer_callback=False,
         )
         models = await service.models()
         if not models:
@@ -621,20 +784,24 @@ def build_router(service: BotService) -> Router:
         builder = InlineKeyboardBuilder()
         for model in models[:20]:
             mark = (
-                " ·"
+                "• "
                 if model["id"] == account.get("model")
                 else ""
             )
             builder.button(
-                text=f"{model.get('name', model['id'])}{mark}"[:60],
+                text=f"{mark}{model.get('name', model['id'])}"[:60],
                 callback_data=f"model_set:{model['id']}",
             )
         builder.button(text="Назад", callback_data="menu")
         builder.adjust(1)
+        current = str(account.get("model") or "").replace("models/", "")
         await _edit(
             callback,
-            "<b>Модель</b>\n\nВыбери модель.",
+            "<b>Модель</b>\n"
+            f"Сейчас: <code>{_esc(current)}</code>\n\n"
+            "Выбери модель.",
             builder.as_markup(),
+            answer_callback=False,
         )
 
     @router.callback_query(F.data.startswith("model_set:"))
@@ -647,10 +814,7 @@ def build_router(service: BotService) -> Router:
             )
             return
         await _edit(
-            callback,
-            f"Модель: <code>{_esc(model_id.replace('models/', ''))}</code>\n\n"
-            + _menu_text(account),
-            _menu_kb(account),
+            callback, _menu_text(account), _menu_kb(account)
         )
 
     @router.callback_query(F.data == "effort")
@@ -663,16 +827,18 @@ def build_router(service: BotService) -> Router:
             return
         builder = InlineKeyboardBuilder()
         for level in ("minimal", "low", "medium", "high", "max"):
-            mark = " ·" if level == account.get("effort") else ""
+            mark = "• " if level == account.get("effort") else ""
             builder.button(
-                text=f"{level.upper()}{mark}",
+                text=f"{mark}{level.upper()}",
                 callback_data=f"effort_set:{level}",
             )
         builder.button(text="Назад", callback_data="menu")
         builder.adjust(2)
         await _edit(
             callback,
-            "<b>Thinking</b>\n\nВыбери уровень.",
+            "<b>Thinking</b>\n"
+            f"Сейчас: <b>{_esc(account.get('effort', '').upper())}</b>\n\n"
+            "Выбери уровень.",
             builder.as_markup(),
         )
 
@@ -692,16 +858,23 @@ def build_router(service: BotService) -> Router:
             account["model"], level
         )
         await _edit(
-            callback,
-            f"Thinking: <b>{level.upper()}</b>\n\n"
-            + _menu_text(account),
-            _menu_kb(account),
+            callback, _menu_text(account), _menu_kb(account)
         )
 
     # ------------------------------------------------------------------ api keys
     @router.callback_query(F.data == "keys")
     async def cb_keys(callback: CallbackQuery):
         await _edit(callback, _keys_text(), _keys_kb())
+
+    @router.callback_query(F.data == "keys_new")
+    async def cb_keys_new(callback: CallbackQuery):
+        await callback.message.answer(
+            _keys_text(),
+            reply_markup=_keys_kb(),
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True,
+        )
+        await callback.answer()
 
     @router.callback_query(F.data == "key_new")
     async def cb_key_new(callback: CallbackQuery, state: FSMContext):
@@ -714,15 +887,19 @@ def build_router(service: BotService) -> Router:
 
     @router.message(BotStates.api_key_name)
     async def on_key_name(message: Message, state: FSMContext):
-        name = (message.text or "").strip()[:64] or "api"
+        name = " ".join((message.text or "").split())[:64] or "api"
         key = get_storage().create_api_key(name)
         await state.clear()
+        builder = InlineKeyboardBuilder()
+        builder.button(text="К ключам", callback_data="keys_new")
+        builder.button(text="В меню", callback_data="menu_new")
+        builder.adjust(2)
         await message.answer(
             "<b>API-ключ создан</b>\n\n"
             f"<code>{_esc(key['key'])}</code>\n\n"
             "Показывается один раз. Используй его в "
             "<code>Authorization: Bearer …</code>.",
-            reply_markup=_back_kb(),
+            reply_markup=builder.as_markup(),
             parse_mode=ParseMode.HTML,
         )
 
@@ -822,6 +999,7 @@ async def run() -> None:
         await bot.set_my_commands(
             [
                 BotCommand(command="start", description="Меню"),
+                BotCommand(command="menu", description="Меню"),
                 BotCommand(command="cancel", description="Отмена"),
             ]
         )

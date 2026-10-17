@@ -125,11 +125,14 @@ before it is stored in the local database. Only that owner can use the bot.
 Bot features:
 
 - send prompts through the active AI Studio profile;
-- add, replace, and delete cookie profiles;
+- add, replace, switch, and delete cookie profiles;
 - choose model and thinking level;
 - create and revoke persistent gateway API keys;
 - view the active profile, cookie count, and key count;
-- optional **Показать мысли** button; reasoning is never mixed into the answer.
+- optional **Показать мысли** button; reasoning is never mixed into the answer;
+- after each answer: **Новый запрос** and **В меню**; after an error: **Повторить**;
+- typing indicator while AI Studio generates;
+- compact inline navigation without decorative emoji or filler text.
 
 Standalone mode:
 

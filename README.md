@@ -17,10 +17,12 @@ the request with the selected model and thinking level.
 - Shared SQLite database for the CLI, gateway, and Telegram bot.
 - OpenAI-compatible `/v1` gateway with a session key and persistent bot-created keys.
 - Telegram bot with inline controls:
-  - add, replace, and delete cookie profiles;
+  - add, replace, switch, and delete cookie profiles;
   - send prompts and choose model/thinking level;
   - create and revoke gateway API keys;
-  - optional reasoning view, never mixed into the answer.
+  - optional reasoning view, never mixed into the answer;
+  - new-prompt / retry / back actions after each result;
+  - typing indicator and compact, emoji-free navigation.
 - No personal `AIza...` API key and no hardcoded credentials in source.
 
 ## Requirements
