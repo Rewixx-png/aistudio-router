@@ -115,6 +115,7 @@ Environment overrides:
 | `AI_STUDIO_GATEWAY_KEY` | Fixed gateway session key instead of a random one. |
 | `AI_STUDIO_CHROME` | Path to the Chromium/Chrome executable. |
 | `AI_STUDIO_PROFILE` | Legacy JSON profile to import once. |
+| `AI_STUDIO_UI` | `ascii` for English + ASCII boxes, `unicode` for Russian + Unicode. Auto-detected on Termux. |
 
 For internet exposure, open/forward the port and prefer HTTPS through a reverse
 proxy. The gateway itself speaks HTTP. Do not expose it without a key.

@@ -10,10 +10,21 @@ import time
 from pathlib import Path
 from typing import List, Optional
 
+from .i18n import (
+    ASCII_UI,
+    BOX_DOUBLE,
+    BOX_ROUNDED,
+    BOX_SIMPLE,
+    DOT,
+    SEP,
+    SPINNER,
+    level_label,
+    tr,
+)
+
 import pyperclip
 import questionary
 import requests
-from rich import box
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -37,14 +48,17 @@ def render_banner() -> None:
     banner.append("AI STUDIO ", style="bold #ff5f87")
     banner.append("DIRECT CHAT ROUTER\n", style="bold #00d7af")
     banner.append(
-        "Cookies • BotGuard • Gemini web chat • OpenAI /v1 gateway",
+        tr(
+            f"Cookies{SEP}BotGuard{SEP}Gemini web chat{SEP}OpenAI /v1 gateway",
+            "Cookies | BotGuard | Gemini web chat | OpenAI /v1 gateway",
+        ),
         style="italic #8a8a8a",
     )
     console.print(
         Panel(
             banner,
             border_style="#ff5f87",
-            box=box.DOUBLE_EDGE,
+            box=BOX_DOUBLE,
             padding=(1, 2),
             expand=False,
         )
@@ -101,7 +115,7 @@ def _bot_dependency() -> tuple[bool, str]:
         except ValueError:
             major = 0
         if major < 3:
-            return False, f"aiogram {version} (нужен 3.x)"
+            return False, f"aiogram {version} ({tr('нужен 3.x', 'requires 3.x')})"
         return True, f"aiogram {version}"
     except Exception as exc:
         return False, str(exc)
@@ -115,7 +129,10 @@ def _start_bot_thread() -> bool:
     if not ok:
         console.print(
             f"[bold red]Telegram: {info}[/]\n"
-            "[dim]Установи: pip install 'aiogram>=3.13'[/]"
+            + tr(
+                "[dim]Установи: pip install 'aiogram>=3.13'[/]",
+                "[dim]Install: pip install 'aiogram>=3.13'[/]",
+            )
         )
         return False
 
@@ -126,7 +143,7 @@ def _start_bot_thread() -> bool:
             asyncio.run(bot_module.run())
         except Exception as exc:
             console.print(
-                f"[bold red]Telegram-бот остановлен: {exc}[/]"
+                f"[bold red]{tr('Telegram-бот остановлен', 'Telegram bot stopped')}: {exc}[/]"
             )
 
     _bot_thread = threading.Thread(
@@ -142,15 +159,19 @@ def _connect_telegram() -> bool:
     if not ok:
         console.print(
             f"[bold red]Telegram: {info}[/]\n"
-            "[dim]Установи: pip install 'aiogram>=3.13'[/]"
+            + tr(
+                "[dim]Установи: pip install 'aiogram>=3.13'[/]",
+                "[dim]Install: pip install 'aiogram>=3.13'[/]",
+            )
         )
         return False
 
     owner_raw = _ask(
         questionary.text(
-            "Telegram ID владельца:",
+            tr("Telegram ID владельца:", "Telegram owner ID:"),
             validate=lambda value: (
-                value.strip().isdigit() or "ID должен быть числом"
+                value.strip().isdigit()
+                or tr("ID должен быть числом", "ID must be numeric")
             ),
             style=CUSTOM_STYLE,
         )
@@ -159,7 +180,10 @@ def _connect_telegram() -> bool:
         return False
     token = _ask(
         questionary.password(
-            "Токен бота от @BotFather:",
+            tr(
+                "Токен бота от @BotFather:",
+                "Bot token from @BotFather:",
+            ),
             style=CUSTOM_STYLE,
         )
     )
@@ -174,13 +198,17 @@ def _connect_telegram() -> bool:
         payload = response.json()
     except Exception:
         console.print(
-            "[bold red]Не удалось проверить токен. "
-            "Проверь сеть и токен.[/]"
+            tr(
+                "[bold red]Не удалось проверить токен. "
+                "Проверь сеть и токен.[/]",
+                "[bold red]Could not validate the token. "
+                "Check the network and token.[/]",
+            )
         )
         return False
     if not payload.get("ok"):
         console.print(
-            f"[bold red]{payload.get('description') or 'Telegram отклонил токен.'}[/]"
+            f"[bold red]{payload.get('description') or tr('Telegram отклонил токен.', 'Telegram rejected the token.')}[/]"
         )
         return False
 
@@ -191,12 +219,16 @@ def _connect_telegram() -> bool:
     storage.set_setting("telegram_owner_id", owner_raw.strip())
     storage.set_setting("telegram_bot_username", username)
     console.print(
-        f"[bold #00d7af]Бот @{username} подключён.[/]"
+        f"[bold #00d7af]{tr(f'Бот @{username} подключён.', f'Bot @{username} connected.')}[/]"
     )
     if _start_bot_thread():
         console.print(
-            "[dim]Бот работает, пока открыт софт. "
-            "Для постоянного запуска: python -m AiStudio.bot[/]"
+            tr(
+                "[dim]Бот работает, пока открыт софт. "
+                "Для постоянного запуска: python -m AiStudio.bot[/]",
+                "[dim]The bot runs while this app is open. "
+                "For standalone polling: python -m AiStudio.bot[/]",
+            )
         )
     return True
 
@@ -214,16 +246,17 @@ def telegram_menu() -> None:
 
     console.print(
         Panel(
-            f"Бот: [bold white]@{username}[/]\n"
-            f"Владелец: [bold white]{owner}[/]\n"
-            f"Статус: "
+            f"{tr('Бот:', 'Bot:')} [bold white]@{username}[/]\n"
+            f"{tr('Владелец:', 'Owner:')} [bold white]{owner}[/]\n"
+            f"{tr('Статус:', 'Status:')} "
             + (
-                "[bold #00d7af]работает[/]"
+                tr("[bold #00d7af]работает[/]", "[bold #00d7af]running[/]")
                 if running
-                else "[yellow]остановлен[/]"
+                else tr("[yellow]остановлен[/]", "[yellow]stopped[/]")
             ),
             title="Telegram",
             border_style="#00d7af",
+            box=BOX_ROUNDED,
             expand=False,
         )
     )
@@ -231,15 +264,17 @@ def telegram_menu() -> None:
     choices = []
     if not running:
         choices.append(
-            questionary.Choice("Запустить бота", value="start")
+            questionary.Choice(tr("Запустить бота", "Start the bot"), value="start")
         )
         choices.append(
-            questionary.Choice("Переподключить", value="reconnect")
+            questionary.Choice(tr("Переподключить", "Reconnect"), value="reconnect")
         )
-    choices.append(questionary.Choice("Назад", value="back"))
+    choices.append(questionary.Choice(tr("Назад", "Back"), value="back"))
     action = _ask(
         questionary.select(
-            "Telegram-бот:", choices=choices, style=CUSTOM_STYLE
+            tr("Telegram-бот:", "Telegram bot:"),
+            choices=choices,
+            style=CUSTOM_STYLE,
         )
     )
     if action == "start":
@@ -266,9 +301,11 @@ def prompt_for_cookies(profile: Profile) -> bool:
         if clip_has_sapisid:
             choices.append(
                 questionary.Choice(
-                    title=(
+                    title=tr(
                         f"Вставить куки из буфера ({clip_format}: "
-                        f"{len(clip_cookies)} шт.)"
+                        f"{len(clip_cookies)} шт.)",
+                        f"Paste cookies from clipboard ({clip_format}: "
+                        f"{len(clip_cookies)})",
                     ),
                     value="clipboard",
                 )
@@ -276,7 +313,10 @@ def prompt_for_cookies(profile: Profile) -> bool:
         else:
             choices.append(
                 questionary.Choice(
-                    title="Прочитать куки из буфера обмена",
+                    title=tr(
+                        "Прочитать куки из буфера обмена",
+                        "Read cookies from clipboard",
+                    ),
                     value="clipboard",
                 )
             )
@@ -291,23 +331,36 @@ def prompt_for_cookies(profile: Profile) -> bool:
         if local_files:
             choices.append(
                 questionary.Choice(
-                    title=f"Выбрать файл с куками ({len(local_files)} шт.)",
+                    title=tr(
+                        f"Выбрать файл с куками ({len(local_files)} шт.)",
+                        f"Choose a cookie file ({len(local_files)})",
+                    ),
                     value="local_file",
                 )
             )
         choices.extend(
             [
                 questionary.Choice(
-                    title="Ввести куки вручную (JSON / cURL / Netscape / Header)",
+                    title=tr(
+                        "Ввести куки вручную "
+                        "(JSON / cURL / Netscape / Header)",
+                        "Enter cookies manually "
+                        "(JSON / cURL / Netscape / Header)",
+                    ),
                     value="manual",
                 ),
-                questionary.Choice(title="Выход", value="exit"),
+                questionary.Choice(
+                    title=tr("Выход", "Exit"), value="exit"
+                ),
             ]
         )
 
         method = _ask(
             questionary.select(
-                "Авторизация в Google AI Studio:",
+                tr(
+                    "Авторизация в Google AI Studio:",
+                    "Google AI Studio authentication:",
+                ),
                 choices=choices,
                 style=CUSTOM_STYLE,
             )
@@ -319,23 +372,31 @@ def prompt_for_cookies(profile: Profile) -> bool:
         if method == "clipboard":
             raw_input = clip_text
         elif method == "local_file":
+            back_label = tr("Назад", "Back")
             filename = _ask(
                 questionary.select(
-                    "Выбери файл:",
-                    choices=[path.name for path in local_files] + ["Назад"],
+                    tr("Выбери файл:", "Choose a file:"),
+                    choices=[path.name for path in local_files]
+                    + [back_label],
                     style=CUSTOM_STYLE,
                 )
             )
-            if not filename or filename == "Назад":
+            if not filename or filename == back_label:
                 continue
             raw_input = Path(filename).read_text(encoding="utf-8", errors="ignore")
         elif method == "manual":
             console.print(
                 Panel(
-                    "Вставь куки ([bold cyan]JSON[/], [bold cyan]cURL[/], "
-                    "[bold cyan]Netscape[/] или [bold cyan]Cookie:[/]).\n"
-                    "Пустая строка завершает ввод.",
+                    tr(
+                        "Вставь куки ([bold cyan]JSON[/], [bold cyan]cURL[/], "
+                        "[bold cyan]Netscape[/] или [bold cyan]Cookie:[/]).\n"
+                        "Пустая строка завершает ввод.",
+                        "Paste cookies ([bold cyan]JSON[/], [bold cyan]cURL[/], "
+                        "[bold cyan]Netscape[/], or [bold cyan]Cookie:[/]).\n"
+                        "An empty line finishes input.",
+                    ),
                     border_style="cyan",
+                    box=BOX_ROUNDED,
                 )
             )
             lines: List[str] = []
@@ -358,7 +419,12 @@ def prompt_for_cookies(profile: Profile) -> bool:
 
         parsed, fmt = detect_and_parse_cookies(raw_input)
         if not parsed:
-            console.print("[bold red]Куки не распознаны. Попробуй ещё раз.[/]")
+            console.print(
+                tr(
+                    "[bold red]Куки не распознаны. Попробуй ещё раз.[/]",
+                    "[bold red]Could not parse the cookies. Try again.[/]",
+                )
+            )
             continue
 
         profile.cookies = parsed
@@ -366,7 +432,7 @@ def prompt_for_cookies(profile: Profile) -> bool:
         profile.web_api_key = None
         profile.save()
         console.print(
-            f"[bold #00d7af]Загружено {len(parsed)} кук[/] "
+            f"[bold #00d7af]{tr(f'Загружено {len(parsed)} кук', f'Loaded {len(parsed)} cookies')}[/] "
             f"[dim]({fmt})[/]"
         )
         return True
@@ -374,18 +440,23 @@ def prompt_for_cookies(profile: Profile) -> bool:
 
 def print_models(models: List[dict]) -> None:
     table = Table(
-        title="Модели Google AI Studio",
-        box=box.SIMPLE_HEAVY,
+        title=tr("Модели Google AI Studio", "Google AI Studio models"),
+        box=BOX_SIMPLE,
         border_style="#ff5f87",
     )
     table.add_column("#", style="dim", width=3)
-    table.add_column("Модель", style="bold #00d7af")
-    table.add_column("Описание", style="dim white", overflow="fold")
+    table.add_column(tr("Модель", "Model"), style="bold #00d7af")
+    table.add_column(
+        tr("Описание", "Description"), style="dim white", overflow="fold"
+    )
     for index, model in enumerate(models, 1):
+        desc = str(model.get("desc", ""))
+        if ASCII_UI and any(ord(char) > 127 for char in desc):
+            desc = "AI Studio model"
         table.add_row(
             str(index),
             f"{model.get('name', model['id'])}\n[dim]{model['id']}[/]",
-            model.get("desc", ""),
+            desc,
         )
     console.print(table)
 
@@ -393,7 +464,12 @@ def print_models(models: List[dict]) -> None:
 def select_model(chat: AistudioChat, profile: Profile) -> bool:
     models = chat.list_models()
     if not models:
-        console.print("[bold red]Не удалось получить список моделей.[/]")
+        console.print(
+            tr(
+                "[bold red]Не удалось получить список моделей.[/]",
+                "[bold red]Could not load the model list.[/]",
+            )
+        )
         return False
 
     print_models(models)
@@ -405,11 +481,16 @@ def select_model(chat: AistudioChat, profile: Profile) -> bool:
         for model in models
     ]
     choices.append(
-        questionary.Choice(title="Ввести ID модели вручную", value="custom")
+        questionary.Choice(
+            title=tr("Ввести ID модели вручную", "Enter a model ID manually"),
+            value="custom",
+        )
     )
     selected = _ask(
         questionary.select(
-            "Выбери модель:", choices=choices, style=CUSTOM_STYLE
+            tr("Выбери модель:", "Choose a model:"),
+            choices=choices,
+            style=CUSTOM_STYLE,
         )
     )
     if not selected:
@@ -417,7 +498,10 @@ def select_model(chat: AistudioChat, profile: Profile) -> bool:
     if selected == "custom":
         model_id = _ask(
             questionary.text(
-                "ID модели (например, models/gemini-4-argon):",
+                tr(
+                    "ID модели (например, models/gemini-4-argon):",
+                    "Model ID (for example, models/gemini-4-argon):",
+                ),
                 default=profile.model,
                 style=CUSTOM_STYLE,
             )
@@ -440,7 +524,9 @@ def select_effort(profile: Profile) -> bool:
     ]
     choices = [
         questionary.Choice(
-            title=LEVEL_DESCRIPTIONS.get(level, level.upper()),
+            title=level_label(
+                level, LEVEL_DESCRIPTIONS.get(level, level.upper())
+            ),
             value=level,
         )
         for level in levels
@@ -449,13 +535,17 @@ def select_effort(profile: Profile) -> bool:
     if not choices:
         choices = [
             questionary.Choice(
-                title=LEVEL_DESCRIPTIONS[level], value=level
+                title=level_label(level, LEVEL_DESCRIPTIONS[level]),
+                value=level,
             )
             for level in ("minimal", "low", "medium", "high")
         ]
     selected = _ask(
         questionary.select(
-            f"Thinking effort для {profile.model}:",
+            tr(
+                f"Thinking effort для {profile.model}:",
+                f"Thinking effort for {profile.model}:",
+            ),
             choices=choices,
             default=profile.effort
             if profile.effort in levels
@@ -473,8 +563,13 @@ def select_effort(profile: Profile) -> bool:
 def print_result(chat: AistudioChat, prompt: str) -> None:
     try:
         with console.status(
-            f"[bold #00d7af]AI Studio генерирует ответ "
-            f"({chat.profile.model}, {chat.profile.effort.upper()})...[/]"
+            tr(
+                f"[bold #00d7af]AI Studio генерирует ответ "
+                f"({chat.profile.model}, {chat.profile.effort.upper()})...[/]",
+                f"[bold #00d7af]AI Studio is generating "
+                f"({chat.profile.model}, {chat.profile.effort.upper()})...[/]",
+            ),
+            spinner=SPINNER,
         ):
             result = chat.generate(prompt)
     finally:
@@ -484,7 +579,12 @@ def print_result(chat: AistudioChat, prompt: str) -> None:
         chat.close()
     if not result.ok:
         console.print(
-            Panel(result.error, title="Ошибка", border_style="red")
+            Panel(
+                result.error,
+                title=tr("Ошибка", "Error"),
+                border_style="red",
+                box=BOX_ROUNDED,
+            )
         )
         return
     if result.thoughts:
@@ -493,13 +593,18 @@ def print_result(chat: AistudioChat, prompt: str) -> None:
                 result.thoughts,
                 title="Thinking",
                 border_style="magenta",
+                box=BOX_ROUNDED,
             )
         )
     console.print(
         Panel(
-            result.answer or "(пустой ответ)",
-            title=f"Ответ {chat.profile.model}",
+            result.answer or tr("(пустой ответ)", "(empty answer)"),
+            title=tr(
+                f"Ответ {chat.profile.model}",
+                f"Answer {chat.profile.model}",
+            ),
             border_style="green",
+            box=BOX_ROUNDED,
         )
     )
 
@@ -522,41 +627,72 @@ def dashboard(
         grid = Table.grid(padding=(0, 2))
         grid.add_column(style="bold #ff5f87", justify="right")
         grid.add_column(style="bold white")
-        grid.add_row("Модель:", f"[#00d7af]{profile.model}[/]")
-        grid.add_row("Thinking:", f"[yellow]{profile.effort.upper()}[/]")
         grid.add_row(
-            "Куки:",
-            f"{len(profile.cookies)} шт. "
-            "(ротация сессионных кук включена)",
+            tr("Модель:", "Model:"),
+            f"[#00d7af]{profile.model}[/]",
         )
-        grid.add_row("Канал:", "AI Studio Web Chat (BotGuard)")
+        grid.add_row(
+            "Thinking:", f"[yellow]{profile.effort.upper()}[/]"
+        )
+        grid.add_row(
+            tr("Куки:", "Cookies:"),
+            tr(
+                f"{len(profile.cookies)} шт. "
+                "(ротация сессионных кук включена)",
+                f"{len(profile.cookies)} cookies "
+                "(session rotation enabled)",
+            ),
+        )
+        grid.add_row(
+            tr("Канал:", "Channel:"),
+            "AI Studio Web Chat (BotGuard)",
+        )
         console.print(
             Panel(
                 grid,
                 title="AI Studio Router",
                 border_style="#00d7af",
+                box=BOX_ROUNDED,
                 expand=False,
             )
         )
 
         action = _ask(
             questionary.select(
-                "Действие:",
+                tr("Действие:", "Action:"),
                 choices=[
                     questionary.Choice(
-                        "Отправить тестовый промпт", value="test"
+                        tr("Отправить тестовый промпт", "Send a test prompt"),
+                        value="test",
                     ),
                     questionary.Choice(
-                        "Запустить OpenAI /v1 сервер (порт 20128)",
+                        tr(
+                            "Запустить OpenAI /v1 сервер (порт 20128)",
+                            "Start OpenAI /v1 server (port 20128)",
+                        ),
                         value="serve",
                     ),
-                    questionary.Choice("Сменить модель", value="model"),
                     questionary.Choice(
-                        "Изменить Thinking effort", value="effort"
+                        tr("Сменить модель", "Change model"), value="model"
                     ),
-                    questionary.Choice("Обновить куки", value="cookies"),
-                    questionary.Choice("Telegram-бот", value="telegram"),
-                    questionary.Choice("Выход", value="exit"),
+                    questionary.Choice(
+                        tr(
+                            "Изменить Thinking effort",
+                            "Change thinking effort",
+                        ),
+                        value="effort",
+                    ),
+                    questionary.Choice(
+                        tr("Обновить куки", "Update cookies"),
+                        value="cookies",
+                    ),
+                    questionary.Choice(
+                        tr("Telegram-бот", "Telegram bot"),
+                        value="telegram",
+                    ),
+                    questionary.Choice(
+                        tr("Выход", "Exit"), value="exit"
+                    ),
                 ],
                 style=CUSTOM_STYLE,
             )
@@ -567,8 +703,11 @@ def dashboard(
         if action == "test":
             prompt = _ask(
                 questionary.text(
-                    "Сообщение:",
-                    default="Привет! Напиши кратко, какая ты модель.",
+                    tr("Сообщение:", "Message:"),
+                    default=tr(
+                        "Привет! Напиши кратко, какая ты модель.",
+                        "Hello! Briefly describe which model you are.",
+                    ),
                     style=CUSTOM_STYLE,
                 )
             )
@@ -594,8 +733,12 @@ def dashboard(
                 chat = AistudioChat(profile, chrome_path)
                 if not chat.list_models():
                     console.print(
-                        "[yellow]Список моделей недоступен, "
-                        "использую сохранённый профиль.[/]"
+                        tr(
+                            "[yellow]Список моделей недоступен, "
+                            "использую сохранённый профиль.[/]",
+                            "[yellow]Model list unavailable; "
+                            "using the saved profile.[/]",
+                        )
                     )
         elif action == "telegram":
             telegram_menu()
@@ -673,7 +816,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             if not ok:
                 console.print(
                     f"[bold red]Telegram: {info}[/]\n"
-                    "[dim]Установи: pip install 'aiogram>=3.13'[/]"
+                    + tr(
+                        "[dim]Установи: pip install 'aiogram>=3.13'[/]",
+                        "[dim]Install: pip install 'aiogram>=3.13'[/]",
+                    )
                 )
                 return 1
             from .bot import run as bot_run
@@ -681,7 +827,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             try:
                 asyncio.run(bot_run())
             except KeyboardInterrupt:
-                console.print("\n[bold red]Telegram-бот остановлен.[/]")
+                console.print(
+                    tr(
+                        "\n[bold red]Telegram-бот остановлен.[/]",
+                        "\n[bold red]Telegram bot stopped.[/]",
+                    )
+                )
                 return 130
             except Exception as exc:
                 console.print(f"[bold red]Telegram: {exc}[/]")
@@ -707,13 +858,15 @@ def main(argv: Optional[List[str]] = None) -> int:
                         result.thoughts,
                         title="Thinking",
                         border_style="magenta",
+                        box=BOX_ROUNDED,
                     )
                 )
             console.print(
                 Panel(
                     result.answer,
-                    title="Ответ AI Studio",
+                    title=tr("Ответ AI Studio", "AI Studio answer"),
                     border_style="green",
+                    box=BOX_ROUNDED,
                 )
             )
             return 0
@@ -749,10 +902,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             chat.close()
         return 0
     except KeyboardInterrupt:
-        console.print("\n[bold red]Выход.[/]")
+        console.print(tr("\n[bold red]Выход.[/]", "\n[bold red]Exit.[/]"))
         return 130
     except Exception as exc:
-        console.print(f"[bold red]Ошибка: {exc}[/]")
+        console.print(
+            f"[bold red]{tr('Ошибка', 'Error')}: {exc}[/]"
+        )
         return 1
 
 

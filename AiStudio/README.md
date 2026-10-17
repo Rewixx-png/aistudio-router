@@ -42,6 +42,21 @@ Alternative module entry point:
 python -m AiStudio
 ```
 
+### Termux / limited terminals
+
+On Termux (and when stdout is not UTF-8) the CLI switches to English labels and
+ASCII boxes, so Cyrillic, bullets, and emoji cannot turn into `_`.
+
+Force a mode explicitly:
+
+```bash
+AI_STUDIO_UI=ascii python AiStudio/main.py   # English + ASCII
+AI_STUDIO_UI=unicode python AiStudio/main.py # Russian + Unicode
+```
+
+The model answers themselves are printed as-is; the UI fallback only changes the
+router's own labels and boxes.
+
 The CLI, gateway, and Telegram bot share a SQLite database:
 `AiStudio/aistudio.db` by default, or `AI_STUDIO_DB`. It stores accounts and
 cookies, the active model/effort, gateway API keys, Telegram settings, and
