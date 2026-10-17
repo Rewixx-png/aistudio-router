@@ -6,11 +6,13 @@ import argparse
 import asyncio
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import List, Optional
 
 import pyperclip
 import questionary
+import requests
 from rich import box
 from rich.panel import Panel
 from rich.table import Table
@@ -26,6 +28,7 @@ from .config import (
 from .cookies import detect_and_parse_cookies
 from .gateway import run_gateway
 from .profile import Profile
+from .storage import get_storage
 
 
 def render_banner() -> None:
@@ -83,6 +86,166 @@ def _ask(question):
     if isinstance(value, BaseException):
         raise value
     return value
+
+
+_bot_thread: Optional[threading.Thread] = None
+
+
+def _bot_dependency() -> tuple[bool, str]:
+    try:
+        import aiogram
+
+        version = str(getattr(aiogram, "__version__", "0"))
+        try:
+            major = int(version.split(".")[0])
+        except ValueError:
+            major = 0
+        if major < 3:
+            return False, f"aiogram {version} (нужен 3.x)"
+        return True, f"aiogram {version}"
+    except Exception as exc:
+        return False, str(exc)
+
+
+def _start_bot_thread() -> bool:
+    global _bot_thread
+    if _bot_thread is not None and _bot_thread.is_alive():
+        return True
+    ok, info = _bot_dependency()
+    if not ok:
+        console.print(
+            f"[bold red]Telegram: {info}[/]\n"
+            "[dim]Установи: pip install 'aiogram>=3.13'[/]"
+        )
+        return False
+
+    from . import bot as bot_module
+
+    def target() -> None:
+        try:
+            asyncio.run(bot_module.run())
+        except Exception as exc:
+            console.print(
+                f"[bold red]Telegram-бот остановлен: {exc}[/]"
+            )
+
+    _bot_thread = threading.Thread(
+        target=target, name="aistudio-telegram", daemon=True
+    )
+    _bot_thread.start()
+    time.sleep(1.0)
+    return bool(_bot_thread.is_alive())
+
+
+def _connect_telegram() -> bool:
+    ok, info = _bot_dependency()
+    if not ok:
+        console.print(
+            f"[bold red]Telegram: {info}[/]\n"
+            "[dim]Установи: pip install 'aiogram>=3.13'[/]"
+        )
+        return False
+
+    owner_raw = _ask(
+        questionary.text(
+            "Telegram ID владельца:",
+            validate=lambda value: (
+                value.strip().isdigit() or "ID должен быть числом"
+            ),
+            style=CUSTOM_STYLE,
+        )
+    )
+    if not owner_raw:
+        return False
+    token = _ask(
+        questionary.password(
+            "Токен бота от @BotFather:",
+            style=CUSTOM_STYLE,
+        )
+    )
+    if not token:
+        return False
+    token = token.strip()
+
+    try:
+        response = requests.get(
+            f"https://api.telegram.org/bot{token}/getMe", timeout=10
+        )
+        payload = response.json()
+    except Exception:
+        console.print(
+            "[bold red]Не удалось проверить токен. "
+            "Проверь сеть и токен.[/]"
+        )
+        return False
+    if not payload.get("ok"):
+        console.print(
+            f"[bold red]{payload.get('description') or 'Telegram отклонил токен.'}[/]"
+        )
+        return False
+
+    result = payload.get("result") or {}
+    username = str(result.get("username") or "bot")
+    storage = get_storage()
+    storage.set_setting("telegram_bot_token", token)
+    storage.set_setting("telegram_owner_id", owner_raw.strip())
+    storage.set_setting("telegram_bot_username", username)
+    console.print(
+        f"[bold #00d7af]Бот @{username} подключён.[/]"
+    )
+    if _start_bot_thread():
+        console.print(
+            "[dim]Бот работает, пока открыт софт. "
+            "Для постоянного запуска: python -m AiStudio.bot[/]"
+        )
+    return True
+
+
+def telegram_menu() -> None:
+    storage = get_storage()
+    token = storage.get_setting("telegram_bot_token")
+    owner = storage.get_setting("telegram_owner_id")
+    username = storage.get_setting("telegram_bot_username") or "bot"
+    running = _bot_thread is not None and _bot_thread.is_alive()
+
+    if not token or not owner:
+        _connect_telegram()
+        return
+
+    console.print(
+        Panel(
+            f"Бот: [bold white]@{username}[/]\n"
+            f"Владелец: [bold white]{owner}[/]\n"
+            f"Статус: "
+            + (
+                "[bold #00d7af]работает[/]"
+                if running
+                else "[yellow]остановлен[/]"
+            ),
+            title="Telegram",
+            border_style="#00d7af",
+            expand=False,
+        )
+    )
+
+    choices = []
+    if not running:
+        choices.append(
+            questionary.Choice("Запустить бота", value="start")
+        )
+        choices.append(
+            questionary.Choice("Переподключить", value="reconnect")
+        )
+    choices.append(questionary.Choice("Назад", value="back"))
+    action = _ask(
+        questionary.select(
+            "Telegram-бот:", choices=choices, style=CUSTOM_STYLE
+        )
+    )
+    if action == "start":
+        _start_bot_thread()
+    elif action == "reconnect":
+        _connect_telegram()
 
 
 def prompt_for_cookies(profile: Profile) -> bool:
@@ -347,6 +510,14 @@ def dashboard(
     chrome_path: Optional[str],
 ) -> AistudioChat:
     while True:
+        fresh = Profile.load(profile.path)
+        if (
+            chat.profile.account_id != fresh.account_id
+            or chat.profile.updated_at != fresh.updated_at
+        ):
+            chat.close()
+            chat = AistudioChat(fresh, chrome_path)
+            profile = fresh
         console.print()
         grid = Table.grid(padding=(0, 2))
         grid.add_column(style="bold #ff5f87", justify="right")
@@ -384,6 +555,7 @@ def dashboard(
                         "Изменить Thinking effort", value="effort"
                     ),
                     questionary.Choice("Обновить куки", value="cookies"),
+                    questionary.Choice("Telegram-бот", value="telegram"),
                     questionary.Choice("Выход", value="exit"),
                 ],
                 style=CUSTOM_STYLE,
@@ -425,6 +597,8 @@ def dashboard(
                         "[yellow]Список моделей недоступен, "
                         "использую сохранённый профиль.[/]"
                     )
+        elif action == "telegram":
+            telegram_menu()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -436,7 +610,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--profile",
         type=Path,
         default=None,
-        help="Path to router_profile.json",
+        help="Legacy router_profile.json to import once",
     )
     parser.add_argument(
         "--prompt",
@@ -467,6 +641,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run the OpenAI-compatible server with a session API key",
     )
     parser.add_argument(
+        "--telegram",
+        action="store_true",
+        help="Run the configured Telegram bot (polling)",
+    )
+    parser.add_argument(
         "--host",
         default="0.0.0.0",
         help="Gateway bind address (default: 0.0.0.0)",
@@ -489,6 +668,26 @@ def main(argv: Optional[List[str]] = None) -> int:
     chrome_path = args.chrome
 
     try:
+        if args.telegram:
+            ok, info = _bot_dependency()
+            if not ok:
+                console.print(
+                    f"[bold red]Telegram: {info}[/]\n"
+                    "[dim]Установи: pip install 'aiogram>=3.13'[/]"
+                )
+                return 1
+            from .bot import run as bot_run
+
+            try:
+                asyncio.run(bot_run())
+            except KeyboardInterrupt:
+                console.print("\n[bold red]Telegram-бот остановлен.[/]")
+                return 130
+            except Exception as exc:
+                console.print(f"[bold red]Telegram: {exc}[/]")
+                return 1
+            return 0
+
         if args.prompt:
             chat = AistudioChat(profile, chrome_path)
             try:

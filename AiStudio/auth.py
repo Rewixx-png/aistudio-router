@@ -7,7 +7,7 @@ import json
 import re
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import requests
 
@@ -28,10 +28,12 @@ class AistudioAuth:
         cookies: Dict[str, str],
         web_api_key: Optional[str] = None,
         profile_path: Optional[Path] = None,
+        cookie_saver: Optional[Callable[[Dict[str, str]], None]] = None,
     ):
         self.cookies = dict(cookies)
         self.web_api_key = web_api_key
         self.profile_path = profile_path
+        self.cookie_saver = cookie_saver
         self.session = requests.Session()
         self._browser_headers: Dict[str, str] = {}
 
@@ -114,6 +116,12 @@ class AistudioAuth:
 
     def _save_rotated_cookies(self) -> None:
         """Persist rotating session cookies without touching unrelated profile data."""
+        if self.cookie_saver is not None:
+            try:
+                self.cookie_saver(dict(self.cookies))
+            except Exception:
+                pass
+            return
         if not self.profile_path or not self.profile_path.exists():
             return
         try:

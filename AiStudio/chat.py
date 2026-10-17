@@ -31,6 +31,7 @@ class AistudioChat:
             cookies=profile.cookies,
             web_api_key=profile.web_api_key,
             profile_path=profile.path,
+            cookie_saver=profile.save_cookies,
         )
         self.tokens = BrowserTokenProvider(
             cookies=profile.cookies,

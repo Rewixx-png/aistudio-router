@@ -42,9 +42,15 @@ Alternative module entry point:
 python -m AiStudio
 ```
 
-The profile (`router_profile.json`) stores cookies, the selected model, and the
-thinking effort. Cookies are the only credential; the web page key is extracted
-automatically from AI Studio when needed.
+The CLI, gateway, and Telegram bot share a SQLite database:
+`AiStudio/aistudio.db` by default, or `AI_STUDIO_DB`. It stores accounts and
+cookies, the active model/effort, gateway API keys, Telegram settings, and
+generation history.
+
+On first start the legacy `router_profile.json` is imported into the database
+once. After that the database is the source of truth and the JSON file is not
+rewritten. Cookies are the only AI Studio credential; the web page key is
+extracted automatically when needed.
 
 ## OpenAI gateway
 
@@ -75,4 +81,45 @@ Environment overrides:
 If the server is behind NAT, forward the port or set the public URL explicitly.
 For internet exposure prefer HTTPS via a reverse proxy; the gateway itself speaks
 HTTP. Do not expose it without the session key.
+
+## Telegram bot
+
+Install the dependencies from `requirements.txt` (including `aiogram>=3.13`),
+open the main menu, and choose **Telegram-бот**. Enter the owner's numeric
+Telegram ID and a token from `@BotFather`. The token is checked with Telegram
+before it is stored in the local database. Only that owner can use the bot.
+
+Bot features:
+
+- send prompts through the active AI Studio profile;
+- add, replace, and delete cookie profiles;
+- choose model and thinking level;
+- create and revoke persistent gateway API keys;
+- view the active profile, cookie count, and key count;
+- optional **Показать мысли** button; reasoning is never mixed into the answer.
+
+Standalone mode:
+
+```bash
+python -m AiStudio.bot
+python AiStudio/main.py --telegram
+```
+
+The CLI menu starts polling in a background thread; the process must stay open.
+Only one polling instance per token can run.
+
+## Storage details
+
+- Database: `AiStudio/aistudio.db` (or `AI_STUDIO_DB`).
+- The bot token, cookies, and API key hashes live there. Keep it private.
+- The database and `router_profile.json` are ignored by git.
+- Gateway keys created in the bot work immediately and survive gateway restarts.
+- The session key printed by the gateway remains valid until that process exits.
+
+## Security
+
+Cookies are equivalent to a logged-in Google account. The bot token and gateway
+keys grant access to that session. Never commit the database, profile JSON, bot
+token, or API keys. This is an unofficial AI Studio endpoint; use it at your own
+risk.
 

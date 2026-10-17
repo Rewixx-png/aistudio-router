@@ -18,6 +18,7 @@ from rich.panel import Panel
 from .chat import AistudioChat, GenerationResult
 from .config import EFFORT_TO_LEVEL, console
 from .profile import Profile
+from .storage import get_storage
 
 
 def _prompt_from_messages(messages: List[Dict[str, Any]]) -> str:
@@ -136,17 +137,33 @@ def create_app(
         )
 
     def auth_error(request: Request):
-        if not api_key:
-            return None
         supplied = provided_api_key(request)
-        if not supplied or not secrets.compare_digest(supplied, api_key):
-            return unauthorized()
-        return None
+        if api_key and supplied and secrets.compare_digest(supplied, api_key):
+            return None
+        if supplied:
+            try:
+                if get_storage().validate_api_key(supplied):
+                    return None
+            except Exception:
+                pass
+        if not api_key and not get_storage().has_api_keys():
+            return None
+        return unauthorized()
 
     def get_chat() -> AistudioChat:
+        profile = Profile.load(profile_path)
         chat = state.get("chat")
+        if chat is not None:
+            current = chat.profile
+            if (
+                current.account_id != profile.account_id
+                or current.updated_at != profile.updated_at
+            ):
+                chat.close()
+                chat = None
+                state["chat"] = None
         if chat is None:
-            chat = AistudioChat(Profile.load(profile_path), chrome_path)
+            chat = AistudioChat(profile, chrome_path)
             state["chat"] = chat
         return chat
 
