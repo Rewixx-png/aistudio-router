@@ -1,0 +1,7 @@
+requests>=2.31
+pyperclip>=1.8
+questionary>=2.0
+rich>=13.0
+fastapi>=0.110
+uvicorn>=0.27
+playwright>=1.40
