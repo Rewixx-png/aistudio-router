@@ -54,6 +54,9 @@ AI_STUDIO_UI=ascii python AiStudio/main.py   # English + ASCII
 AI_STUDIO_UI=unicode python AiStudio/main.py # Russian + Unicode
 ```
 
+An explicit choice is saved to `~/.aistudio_ui`; later runs use it without the
+environment variable.
+
 The model answers themselves are printed as-is; the UI fallback only changes the
 router's own labels and boxes.
 

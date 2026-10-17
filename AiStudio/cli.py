@@ -16,6 +16,7 @@ from .i18n import (
     BOX_ROUNDED,
     BOX_SIMPLE,
     DOT,
+    POINTER,
     SEP,
     SPINNER,
     level_label,
@@ -274,6 +275,7 @@ def telegram_menu() -> None:
         questionary.select(
             tr("Telegram-бот:", "Telegram bot:"),
             choices=choices,
+            pointer=POINTER,
             style=CUSTOM_STYLE,
         )
     )
@@ -362,6 +364,7 @@ def prompt_for_cookies(profile: Profile) -> bool:
                     "Google AI Studio authentication:",
                 ),
                 choices=choices,
+                pointer=POINTER,
                 style=CUSTOM_STYLE,
             )
         )
@@ -378,6 +381,7 @@ def prompt_for_cookies(profile: Profile) -> bool:
                     tr("Выбери файл:", "Choose a file:"),
                     choices=[path.name for path in local_files]
                     + [back_label],
+                    pointer=POINTER,
                     style=CUSTOM_STYLE,
                 )
             )
@@ -490,6 +494,7 @@ def select_model(chat: AistudioChat, profile: Profile) -> bool:
         questionary.select(
             tr("Выбери модель:", "Choose a model:"),
             choices=choices,
+            pointer=POINTER,
             style=CUSTOM_STYLE,
         )
     )
@@ -550,6 +555,7 @@ def select_effort(profile: Profile) -> bool:
             default=profile.effort
             if profile.effort in levels
             else levels[0],
+            pointer=POINTER,
             style=CUSTOM_STYLE,
         )
     )
@@ -694,6 +700,7 @@ def dashboard(
                         tr("Выход", "Exit"), value="exit"
                     ),
                 ],
+                pointer=POINTER,
                 style=CUSTOM_STYLE,
             )
         )

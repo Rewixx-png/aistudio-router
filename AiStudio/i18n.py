@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 
 
 def is_termux() -> bool:
@@ -47,7 +48,28 @@ ensure_utf8()
 
 from rich import box  # noqa: E402
 
+_UI_FILE = Path.home() / ".aistudio_ui"
 _choice = os.environ.get("AI_STUDIO_UI", "").strip().lower()
+
+if _choice and _choice != "auto":
+    # Remember an explicit choice, so a one-off AI_STUDIO_UI=ascii run
+    # persists for SSH/limited-font sessions.
+    try:
+        if _choice in ("ascii", "en", "english"):
+            _UI_FILE.write_text("ascii", encoding="utf-8")
+        elif _choice in ("unicode", "ru", "russian"):
+            _UI_FILE.write_text("unicode", encoding="utf-8")
+        _UI_FILE.chmod(0o600)
+    except OSError:
+        pass
+elif not _choice:
+    try:
+        _saved = _UI_FILE.read_text(encoding="utf-8").strip().lower()
+        if _saved in ("ascii", "unicode"):
+            _choice = _saved
+    except OSError:
+        pass
+
 if _choice in ("ascii", "en", "english"):
     ASCII_UI = True
 elif _choice in ("unicode", "ru", "russian"):
@@ -61,6 +83,7 @@ BOX_SIMPLE = box.ASCII if ASCII_UI else box.SIMPLE_HEAVY
 SEP = " - " if ASCII_UI else " • "
 DOT = " | " if ASCII_UI else " · "
 SPINNER = "line" if ASCII_UI else "dots"
+POINTER = ">" if ASCII_UI else "»"
 
 
 def tr(ru: str, en: str) -> str:

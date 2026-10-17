@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import html
 import logging
+import threading
 import time
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
@@ -824,7 +825,12 @@ async def run() -> None:
                 BotCommand(command="cancel", description="Отмена"),
             ]
         )
-        await dispatcher.start_polling(bot)
+        await dispatcher.start_polling(
+            bot,
+            handle_signals=(
+                threading.current_thread() is threading.main_thread()
+            ),
+        )
     finally:
         service.close()
         await bot.session.close()
