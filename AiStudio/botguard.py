@@ -155,16 +155,87 @@ class BrowserTokenProvider:
             raise
         self._started = True
 
+    def _diagnose_chat_page(self) -> Dict[str, str]:
+        try:
+            url = self._page.url
+        except Exception:
+            url = "unknown"
+        try:
+            title = self._page.title()
+        except Exception:
+            title = "unknown"
+        try:
+            body = " ".join(
+                self._page.inner_text("body").split()
+            )[:600]
+        except Exception:
+            body = "no body text"
+
+        lower = f"{url}\n{title}\n{body}".lower()
+        hint = ""
+        if (
+            "accounts.google.com" in lower
+            or "/welcome" in lower
+            or "sign in" in lower
+            or "войти" in lower
+        ):
+            hint = (
+                "Похоже, куки не авторизуют AI Studio. "
+                "Добавь свежие куки."
+            )
+        elif "before you continue" in lower or "consent" in lower:
+            hint = (
+                "Google показывает consent/privacy экран. "
+                "Открой AI Studio в обычном браузере и подтверди его."
+            )
+        elif "update your browser" in lower or "unsupported" in lower:
+            hint = "Chromium слишком старый или не поддерживается."
+        return {
+            "url": url,
+            "title": title,
+            "body": body,
+            "hint": hint,
+        }
+
     def _load_chat(self, model_slug: Optional[str] = None) -> None:
         if self._page is None:
             return
         self._current_model_slug = model_slug
-        url = f"{ORIGIN}/prompts/new_chat"
+        bare_url = f"{ORIGIN}/prompts/new_chat"
+        urls = []
         if model_slug:
-            url = f"{url}?model={model_slug}"
-        self._page.goto(url, wait_until="domcontentloaded", timeout=60000)
-        self._page.wait_for_selector(INPUT_SELECTOR, timeout=35000)
-        time.sleep(self.warmup_seconds)
+            urls.append(f"{bare_url}?model={model_slug}")
+        urls.append(bare_url)
+
+        last_error: Optional[Exception] = None
+        for index, url in enumerate(urls):
+            try:
+                self._page.goto(
+                    url, wait_until="domcontentloaded", timeout=60000
+                )
+                self._page.wait_for_selector(
+                    INPUT_SELECTOR, state="visible", timeout=60000
+                )
+                # A bare-page fallback still mints a valid prompt-bound token.
+                # Keep the requested model for the RPC payload.
+                self._current_model_slug = model_slug
+                time.sleep(self.warmup_seconds)
+                return
+            except Exception as exc:
+                last_error = exc
+                if index + 1 < len(urls):
+                    continue
+
+        diag = self._diagnose_chat_page()
+        hint = f"\n{hint}" if (hint := diag.get("hint")) else ""
+        raise RuntimeError(
+            "AI Studio не показал поле ввода.\n"
+            f"URL: {diag['url']}\n"
+            f"Заголовок: {diag['title']}\n"
+            f"Куки: {len(self.cookies)}\n"
+            f"Страница: {diag['body']}"
+            f"{hint}"
+        ) from last_error
 
     def reload(self) -> None:
         """Reload the page after a rejected token, keeping the active model."""
