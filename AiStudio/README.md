@@ -110,6 +110,8 @@ Environment overrides:
   `https://ai.example.com`; `/v1` is appended if missing). Also available as
   `--public-url`.
 - `AI_STUDIO_GATEWAY_KEY` — fixed API key instead of a random session key.
+- `AI_STUDIO_PUBLIC_PORT` — gateway port used by the bot's API-keys screen when
+  no `AI_STUDIO_PUBLIC_URL` or stored gateway URL is available (default `20128`).
 
 If the server is behind NAT, forward the port or set the public URL explicitly.
 For internet exposure prefer HTTPS via a reverse proxy; the gateway itself speaks
@@ -128,6 +130,8 @@ Bot features:
 - add, replace, switch, and delete cookie profiles;
 - choose model and thinking level;
 - create and revoke persistent gateway API keys;
+- the API keys screen shows the public base URL and every model exposed by the
+  gateway, so clients can copy the endpoint and model IDs directly;
 - view the active profile, cookie count, and key count;
 - optional **Показать мысли** button; reasoning is never mixed into the answer;
 - after each answer: **Новый запрос** and **В меню**; after an error: **Повторить**;

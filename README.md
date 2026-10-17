@@ -20,6 +20,7 @@ the request with the selected model and thinking level.
   - add, replace, switch, and delete cookie profiles;
   - send prompts and choose model/thinking level;
   - create and revoke gateway API keys;
+  - the API-keys screen shows the public base URL and available model IDs;
   - optional reasoning view, never mixed into the answer;
   - new-prompt / retry / back actions after each result;
   - typing indicator and compact, emoji-free navigation.
@@ -118,6 +119,7 @@ Environment overrides:
 | --- | --- |
 | `AI_STUDIO_DB` | Path to the SQLite database. |
 | `AI_STUDIO_PUBLIC_URL` | Exact public base URL (for example `https://ai.example.com`). |
+| `AI_STUDIO_PUBLIC_PORT` | Gateway port for the bot's API-keys screen (default `20128`). |
 | `AI_STUDIO_GATEWAY_KEY` | Fixed gateway session key instead of a random one. |
 | `AI_STUDIO_CHROME` | Path to the Chromium/Chrome executable. |
 | `AI_STUDIO_PROFILE` | Legacy JSON profile to import once. |

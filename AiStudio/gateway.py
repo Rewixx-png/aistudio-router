@@ -318,6 +318,10 @@ def run_gateway(
     public_base = resolve_public_url(
         host, port, public_url or os.environ.get("AI_STUDIO_PUBLIC_URL")
     )
+    try:
+        get_storage().set_setting("gateway_public_url", public_base)
+    except Exception:
+        pass
     app = create_app(profile_path, chrome_path, api_key=session_key)
     profile = Profile.load(profile_path)
     config = uvicorn.Config(

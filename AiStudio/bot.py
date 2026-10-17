@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import html
 import logging
+import os
 import threading
 import time
 from collections import OrderedDict
@@ -30,6 +31,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from .chat import AistudioChat, GenerationResult
 from .config import EFFORT_TO_LEVEL, FALLBACK_MODELS, LEVEL_DESCRIPTIONS
 from .cookies import detect_and_parse_cookies
+from .gateway import resolve_public_url
 from .profile import Profile
 from .storage import get_storage
 
@@ -280,6 +282,32 @@ def _cookies_kb(account: Optional[Dict[str, Any]]):
 
 
 _last_prompts: Dict[int, str] = {}
+_base_url_cache: Optional[tuple[float, str]] = None
+
+
+def _public_base_url() -> str:
+    global _base_url_cache
+    explicit = os.environ.get("AI_STUDIO_PUBLIC_URL")
+    try:
+        port = int(os.environ.get("AI_STUDIO_PUBLIC_PORT", "20128"))
+    except ValueError:
+        port = 20128
+    if explicit:
+        return resolve_public_url("0.0.0.0", port, explicit)
+
+    stored = get_storage().get_setting("gateway_public_url")
+    if stored:
+        return stored
+
+    now = time.time()
+    if _base_url_cache and now - _base_url_cache[0] < 300:
+        return _base_url_cache[1]
+    try:
+        url = resolve_public_url("0.0.0.0", port)
+    except Exception:
+        url = f"http://127.0.0.1:{port}/v1"
+    _base_url_cache = (now, url)
+    return url
 
 
 async def _typing_loop(bot: Bot, chat_id: int) -> None:
@@ -374,20 +402,53 @@ def _profiles_kb():
     return builder.as_markup()
 
 
-def _keys_text() -> str:
+def _keys_text(models: Optional[List[Dict[str, Any]]] = None) -> str:
+    base_url = _public_base_url()
+    model_ids = []
+    for model in models or []:
+        model_id = str(model.get("id") or "").replace("models/", "")
+        if model_id and model_id not in model_ids:
+            model_ids.append(model_id)
+    if not model_ids:
+        model_ids = [
+            str(item["id"]).replace("models/", "")
+            for item in FALLBACK_MODELS
+        ]
+
     keys = get_storage().list_api_keys()
+    lines = [
+        "<b>API-ключи</b>",
+        "",
+        f"Base URL: <code>{_esc(base_url)}</code>",
+        "",
+        "<b>Модели</b>",
+    ]
+    for model_id in model_ids[:15]:
+        lines.append(f"<code>{_esc(model_id)}</code>")
+    if len(model_ids) > 15:
+        lines.append(f"… и ещё {len(model_ids) - 15}")
+
+    lines.extend(["", "<b>Ключи</b>"])
     if not keys:
-        return (
-            "<b>API-ключи</b>\n\n"
-            "Активных ключей нет. Ключи используются для OpenAI-совместимого "
-            "gateway."
-        )
-    lines = ["<b>API-ключи</b>", ""]
-    for key in keys:
-        created = time.strftime("%d.%m.%Y", time.localtime(key["created_at"]))
-        lines.append(
-            f"<code>{_esc(key['prefix'])}…</code> · {_esc(key['name'])} · {created}"
-        )
+        lines.append("Активных ключей нет.")
+    else:
+        for key in keys[:8]:
+            created = time.strftime(
+                "%d.%m.%Y", time.localtime(key["created_at"])
+            )
+            lines.append(
+                f"<code>{_esc(key['prefix'])}…</code> · "
+                f"{_esc(key['name'])} · {created}"
+            )
+        if len(keys) > 8:
+            lines.append(f"… и ещё {len(keys) - 8}")
+
+    lines.extend(
+        [
+            "",
+            "Заголовок: <code>Authorization: Bearer …</code>",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -396,8 +457,9 @@ def _keys_kb():
     builder.button(text="Создать", callback_data="key_new")
     if get_storage().list_api_keys():
         builder.button(text="Отозвать", callback_data="key_revoke")
+    builder.button(text="Обновить", callback_data="keys")
     builder.button(text="Назад", callback_data="menu")
-    builder.adjust(1)
+    builder.adjust(2)
     return builder.as_markup()
 
 
@@ -864,17 +926,37 @@ def build_router(service: BotService) -> Router:
     # ------------------------------------------------------------------ api keys
     @router.callback_query(F.data == "keys")
     async def cb_keys(callback: CallbackQuery):
-        await _edit(callback, _keys_text(), _keys_kb())
+        await callback.answer()
+        await _edit(
+            callback,
+            "Загружаю ключи и модели…",
+            _back_kb(),
+            answer_callback=False,
+        )
+        try:
+            models = await service.models()
+        except Exception:
+            models = []
+        await _edit(
+            callback,
+            _keys_text(models),
+            _keys_kb(),
+            answer_callback=False,
+        )
 
     @router.callback_query(F.data == "keys_new")
     async def cb_keys_new(callback: CallbackQuery):
+        await callback.answer()
+        try:
+            models = await service.models()
+        except Exception:
+            models = []
         await callback.message.answer(
-            _keys_text(),
+            _keys_text(models),
             reply_markup=_keys_kb(),
             parse_mode=ParseMode.HTML,
             disable_web_page_preview=True,
         )
-        await callback.answer()
 
     @router.callback_query(F.data == "key_new")
     async def cb_key_new(callback: CallbackQuery, state: FSMContext):
