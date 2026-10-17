@@ -230,8 +230,8 @@ async def _send_plain(message: Message, text: str) -> Optional[Message]:
     last: Optional[Message] = None
     for chunk in _chunks(text):
         last = await message.answer(
-            _esc(chunk) or "…",
-            parse_mode=ParseMode.HTML,
+            chunk or "…",
+            parse_mode=None,
             disable_web_page_preview=True,
         )
     return last

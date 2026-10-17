@@ -50,6 +50,16 @@ class Storage:
                 yield connection
         finally:
             connection.close()
+            self._secure_permissions()
+
+    def _secure_permissions(self) -> None:
+        for suffix in ("", "-wal", "-shm"):
+            path = Path(f"{self.path}{suffix}")
+            if path.exists():
+                try:
+                    path.chmod(0o600)
+                except OSError:
+                    pass
 
     def ensure_schema(self) -> None:
         with self._db() as conn:
