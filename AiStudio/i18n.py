@@ -1,8 +1,8 @@
 """Terminal UI language and glyph fallbacks.
 
-Termux's default font often lacks Cyrillic, bullets, and emoji even when the
-terminal uses UTF-8. In that environment the CLI switches to plain English and
-ASCII boxes. Desktop terminals keep the Russian UI.
+Termux and SSH clients often use fonts that lack Cyrillic, bullets, and emoji
+even when the terminal uses UTF-8. In those environments the CLI switches to
+plain English and ASCII boxes. Local desktop terminals keep the Russian UI.
 """
 
 from __future__ import annotations
@@ -25,6 +25,9 @@ def _utf8_stream() -> bool:
 
 
 _ORIGINAL_UTF8 = _utf8_stream()
+_SSH_SESSION = bool(
+    os.environ.get("SSH_CONNECTION") or os.environ.get("SSH_CLIENT")
+)
 
 
 def ensure_utf8() -> None:
@@ -50,7 +53,7 @@ if _choice in ("ascii", "en", "english"):
 elif _choice in ("unicode", "ru", "russian"):
     ASCII_UI = False
 else:
-    ASCII_UI = is_termux() or not _ORIGINAL_UTF8
+    ASCII_UI = is_termux() or _SSH_SESSION or not _ORIGINAL_UTF8
 
 BOX_DOUBLE = box.ASCII if ASCII_UI else box.DOUBLE_EDGE
 BOX_ROUNDED = box.ASCII if ASCII_UI else box.ROUNDED

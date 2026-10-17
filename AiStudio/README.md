@@ -44,8 +44,8 @@ python -m AiStudio
 
 ### Termux / limited terminals
 
-On Termux (and when stdout is not UTF-8) the CLI switches to English labels and
-ASCII boxes, so Cyrillic, bullets, and emoji cannot turn into `_`.
+On Termux, SSH sessions, and non-UTF-8 stdout the CLI switches to English labels
+and ASCII boxes, so Cyrillic, bullets, and emoji cannot turn into `_`.
 
 Force a mode explicitly:
 
