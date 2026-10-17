@@ -42,9 +42,15 @@ def find_chromium(explicit: Optional[str] = None) -> Optional[str]:
         if found:
             candidates.append(found)
 
+    prefix = os.environ.get("PREFIX")
+    if prefix:
+        for name in ("chromium", "chromium-browser", "google-chrome"):
+            path = Path(prefix) / "bin" / name
+            if path.is_file() and os.access(path, os.X_OK):
+                candidates.append(str(path))
+
     home = Path.home()
     patterns = [
-        ".omp/puppeteer/chrome/*/chrome-linux64/chrome",
         ".cache/ms-playwright/chromium-*/chrome-linux/chrome",
         ".cache/ms-playwright/chromium-*/chrome-linux64/chrome",
     ]
@@ -114,11 +120,27 @@ class BrowserTokenProvider:
             self._browser = self._playwright.chromium.launch(**launch_kwargs)
         except Exception as exc:
             self.close()
+            text = str(exc).strip()
+            reason = ""
+            for line in text.splitlines():
+                if "[err]" in line:
+                    reason = line.strip()
+                    break
+            if not reason:
+                reason = (
+                    text.splitlines()[0]
+                    if text
+                    else exc.__class__.__name__
+                )
+            browser = executable or "Playwright bundled Chromium"
             raise RuntimeError(
-                "Не удалось запустить Chromium для AI Studio. "
-                "Установи браузер (python -m playwright install chromium) "
-                "или задай путь в AI_STUDIO_CHROME. "
-                f"Причина: {exc}"
+                "Не удалось запустить Chromium для AI Studio.\n"
+                f"Браузер: {browser}\n"
+                f"Причина: {reason[:500]}\n"
+                "Termux: pkg install chromium и "
+                "AI_STUDIO_CHROME=$(command -v chromium). "
+                "Linux: apt install chromium. "
+                "Либо: python -m playwright install chromium."
             ) from exc
 
         self._context = self._browser.new_context(user_agent=USER_AGENT)

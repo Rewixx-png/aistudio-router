@@ -13,11 +13,26 @@ level selected in the router.
 
 ```bash
 pip install -r AiStudio/requirements.txt
-# Either use an existing Chrome/Chromium or install Playwright's browser:
+
+# Use a system Chromium:
+#   Termux: pkg install chromium
+#   Debian/Ubuntu: apt install chromium
+# Or install Playwright's bundled browser where supported:
 python -m playwright install chromium
 ```
 
-Set `AI_STUDIO_CHROME=/path/to/chrome` if auto-detection fails.
+The router intentionally does **not** auto-use the OMP agent's internal
+Puppeteer browser: that bundle is tied to the agent and may be a broken wrapper
+or the wrong architecture outside OMP.
+
+If auto-detection fails, set an explicit executable:
+```bash
+AI_STUDIO_CHROME=/path/to/chrome python AiStudio/main.py
+```
+On Termux this is usually:
+```bash
+AI_STUDIO_CHROME="$(command -v chromium)" python AiStudio/main.py
+```
 
 ## Run
 

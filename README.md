@@ -26,9 +26,13 @@ the request with the selected model and thinking level.
 ## Requirements
 
 - Python 3.10+
-- A Chromium/Chrome binary (auto-detected or `AI_STUDIO_CHROME`)
+- A system Chromium/Chrome binary (auto-detected from `PATH`/`PREFIX` or set
+  `AI_STUDIO_CHROME`). The OMP agent's internal Puppeteer bundle is not used.
 - A logged-in Google AI Studio session (cookies)
 - A Telegram bot token from `@BotFather` for the bot
+
+On Termux: `pkg install chromium`, then
+`AI_STUDIO_CHROME="$(command -v chromium)" python AiStudio/main.py` if needed.
 
 ## Install
 
